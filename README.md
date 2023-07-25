@@ -31,13 +31,14 @@ Only GCC is supported for now.
 | ------- | ---------- |
 | RP2040 (Raspberry Pico)  |   working  |
 
-## TODO
+## TODO before 1.0 stable release
 
-- Move stacks out of qor.c
-- Documentation (only on this README.txt)
-- Design documentation (in a separated Markdown file in docs)
-- Examples in `examples` directory
-- Port on a RISC-V microcontroller
+[X] Move stacks out of qor.c
+[] Documentation (only on this README.txt)
+[] Design documentation (in a separated Markdown file in docs)
+[] Examples in `examples` directory
+[] Port on a RISC-V microcontroller
+[] Mailbox wait in IRQ context (return immediately instead of sleep which is non sense)
 
 # Documentation
 

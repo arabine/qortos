@@ -149,9 +149,6 @@ static void timer_init()
 // ===========================================================================================================
 // GLOBAL AND STATIC VARIABLES
 // ===========================================================================================================
-
-static uint32_t Stacks[MAXNUMTHREADS][STACKSIZE];
-
 /* Pointer to the currently running thread */
 qor_tcb_t *RunPt = NULL;
 static qor_tcb_t *TcbHead = NULL;
@@ -210,26 +207,27 @@ uint32_t *qor_initialize_stack(uint32_t *top_of_stack, thread_func_t task, void 
     return top_of_stack;
 }
 
-void qor_create_thread(qor_tcb_t *tcb, thread_func_t task, uint8_t priority, const char *name)
+void qor_create_thread(qor_tcb_t *tcb, thread_func_t task, uint32_t *stack, uint32_t stack_size, uint8_t priority, const char *name)
 {
-    assert_or_panic(ActiveTCBsCount >= 0 && ActiveTCBsCount < MAXNUMTHREADS);
+    // assert_or_panic(ActiveTCBsCount >= 0 && ActiveTCBsCount < MAXNUMTHREADS);
     disable_irq();
 
-    memset(&Stacks[ActiveTCBsCount][0], 0xAAAAAAAA, sizeof(Stacks[ActiveTCBsCount][0]) * STACKSIZE);
+    memset(&stack[0], 0xAAAAAAAA, sizeof(stack[0]) * stack_size);
 
-    tcb->stack_bottom = &Stacks[ActiveTCBsCount][0];
+    tcb->stack_bottom = &stack[0];
+    tcb->stack_size = stack_size;
     tcb->stack_usage = 0;
     tcb->so = false;
 
     tcb->state = qor_tcb_state_active;
     tcb->wait_time = 0;
-    tcb->state = qor_tcb_state_active;
     tcb->priority = priority;
     tcb->name = name;
     tcb->next = NULL;
     tcb->mbox = NULL;
     tcb->wait_next = NULL;
-    tcb->sp = qor_initialize_stack(&Stacks[ActiveTCBsCount][STACKSIZE], task, (void *)name);
+    // The ARM architecture is full-descending task, so we indicate the last occupied entry (not a free cell)
+    tcb->sp = qor_initialize_stack(&stack[stack_size], task, (void *)name);
 
     if (TcbHead == NULL)
     {
@@ -251,7 +249,7 @@ void qor_create_thread(qor_tcb_t *tcb, thread_func_t task, uint8_t priority, con
     enable_irq();
 }
 
-bool __attribute__((naked)) qor_start(qor_tcb_t *idle_tcb, thread_func_t idle_task)
+bool __attribute__((naked)) qor_start(qor_tcb_t *idle_tcb, thread_func_t idle_task, uint32_t *idle_stack, uint32_t idle_stack_size)
 {
     assert_or_panic(ActiveTCBsCount > 0);
 
@@ -260,7 +258,7 @@ bool __attribute__((naked)) qor_start(qor_tcb_t *idle_tcb, thread_func_t idle_ta
         return false;
     }
 
-    qor_create_thread(idle_tcb, idle_task, 0, "IdleTask");
+    qor_create_thread(idle_tcb, idle_task, idle_stack, idle_stack_size, 0, "IdleTask");
 
     // FIXME: use the scheduler to find the best first thread to start
     IdleTcb = idle_tcb;
@@ -342,7 +340,10 @@ void qor_scheduler(void)
     }
     else if (best_sleeping != NULL)
     {
+        // On va réveiller un endormi, car son temps d'attente est dépassé (ok ou timeout, ça dépend si c'est un sleep volontaire ou attente de mailbox dépassée)
         RunPt = best_sleeping;
+        RunPt->state = qor_tcb_state_active; // devient actif
+        RunPt->ts = 0;                       // means timeout
     }
     else
     {
@@ -383,6 +384,7 @@ void qor_mbox_init(qor_mbox_t *mbox, void **msgBuffer, uint32_t maxCount)
     mbox->read = 0;
     mbox->read = 0;
     mbox->head = NULL;
+    mbox->count = 0;
 }
 
 uint32_t qor_mbox_wait(qor_mbox_t *mbox, void **msg, uint32_t wait_ms)
@@ -397,6 +399,13 @@ uint32_t qor_mbox_wait(qor_mbox_t *mbox, void **msg, uint32_t wait_ms)
             RunPt->mbox = mbox;
             mbox->head = RunPt;
             qor_sleep(wait_ms);
+
+            disable_irq();
+            if (RunPt->ts == 0)
+            {
+                enable_irq();
+                return QOR_MBOX_TIMEOUT;
+            }
         }
         else
         {
@@ -446,11 +455,12 @@ uint32_t qor_mbox_notify(qor_mbox_t *mbox, void *msg, uint32_t notifyOption)
     }
     mbox->count++;
 
-    // We warn all waiting threads that a new message is available
+    // We warn waiting thread that a new message is available
     qor_tcb_t *t = mbox->head;
     if (t != NULL)
     {
         t->wait_time = 0;
+        t->state = qor_tcb_state_active; // force wake up
     }
 
     enable_irq();
