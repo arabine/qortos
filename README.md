@@ -1,5 +1,7 @@
 # QoRTOS
 
+![qortos_logo](logo.png)
+
 Quite Ok RTOS for microcontrollers.
 
 - tickless
