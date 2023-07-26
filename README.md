@@ -35,12 +35,13 @@ Only GCC is supported for now.
 
 ## TODO before 1.0 stable release
 
-  [X] Move stacks out of qor.c
-  [] Documentation (only on this README.txt)
-  [] Design documentation (in a separated Markdown file in docs)
-  [] Examples in `examples` directory
-  [] Port on a RISC-V microcontroller
-  [] Mailbox wait in IRQ context (return immediately instead of sleep which is non sense)
+  - [X] Move stacks out of qor.c
+  - [ ] API documentation with examples
+  - [ ] Documentation (only on this README.txt)
+  - [ ] Design documentation (in a separated Markdown file in docs)
+  - [ ] Examples in `examples` directory
+  - [ ] Port on a RISC-V microcontroller
+  - [ ] Mailbox wait in IRQ context (return immediately instead of sleep which is non sense)
 
 # Documentation
 
